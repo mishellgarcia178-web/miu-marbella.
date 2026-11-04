@@ -92,8 +92,17 @@ body:has(.entry-shell){background:#650a1b}
 </style>
 </head>
 <body><div id="root"></div><div id="overlay"></div><div id="toastbox" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 'use strict';
+// CONFIGURACIÓN PÚBLICA: reemplazá solamente este valor en GitHub.
+// Nunca coloqués aquí un Google Client Secret, service_role o sb_secret_ .
+const SUPABASE_URL = 'https://bzgv tbfjnucjrswxtbxw.supabase.co'.replace(' ','');
+const SUPABASE_PUBLISHABLE_KEY = 'PEGA_AQUI_TU_SB_PUBLISHABLE';
+let supaClient = null;
+let googleSession = null;
+let authMessage = '';
+const googleConfigured = () => SUPABASE_PUBLISHABLE_KEY.startsWith('sb_publishable_');
 const KEY='miu_marbella_contaduria_v1';
 const courses=[
 {id:1,name:'Auditoría I',code:'AUD-210',section:'A',teacher:'Gabriela Méndez',room:'D-203',days:['Lunes','Miércoles'],time:'07:30–08:50',symbol:'AU',credits:4},
@@ -140,7 +149,7 @@ function statustxt(t){return({done:'Entregada',late:'Vencida',today:'Vence hoy',
 function icon(n){return({'dashboard':'⌂','tasks':'▤','courses':'▦','schedule':'▦','announcements':'♧','grades':'◫','groups':'♧','library':'▣','pensum':'▥','assign':'◇','conference':'▣','payments':'▤','parking':'▣','chat':'◌','teachers':'♙','students':'♧','admin':'▦'})[n]||'◇'}
 const menus={estudiante:[['dashboard','Mi panorama'],['tasks','Plan de entregas'],['courses','Mis cursos'],['schedule','Agenda de clases'],['announcements','Centro de avisos'],['groups','Trabajos en grupo'],['library','Biblioteca de materiales'],['grades','Mis notas'],['pensum','Mi pensum'],['assign','Asignación'],['conference','Conferencias'],['payments','Pagos'],['parking','Parqueo'],['teachers','Catedráticos']],catedratico:[['dashboard','Mi panorama'],['courses','Mis cursos'],['tasks','Tareas y entregas'],['grades','Calificaciones'],['announcements','Centro de avisos'],['conference','Conferencias']],administracion:[['dashboard','Mi panorama'],['courses','Cursos y cupos'],['assign','Asignación'],['announcements','Centro de avisos'],['conference','Conferencias'],['admin','Usuarios y roles']]};
 function nav(v){view=v;drawer=false;render();window.scrollTo(0,0)}
-function render(){const root=$('#root');document.body.classList.toggle('mobile-preview',mobilePreview);if(!state.logged){root.innerHTML=loginHTML();return}const navs=menus[state.role]||menus.estudiante;if(!navs.some(n=>n[0]===view))view='dashboard';let unread=state.announcements.filter(a=>!a.read).length;root.innerHTML=`<div class="notice"><span><strong>MiU</strong> · Prototipo académico no oficial · Sin vinculación operativa con la universidad · Datos ficticios ${storageOK?'':'· Guardado local no disponible'}</span><div class="notice-actions"><button class="link-btn" onclick="toggleMobile()">${mobilePreview?'Vista normal':'Vista móvil'}</button><button class="link-btn" onclick="resetDemo()">Reiniciar demo</button></div></div><div class="app"><aside class="sidebar ${drawer?'open':''}" id="sidebar"><div><div class="brand">MiU<span style="color:#f7b5b9">.</span></div><div class="faculty">Auditoría y Contaduría Pública</div></div><nav class="side-nav">${navs.map(n=>`<button class="navbtn ${view===n[0]?'active':''}" onclick="nav('${n[0]}')"><span class="ico">${icon(n[0])}</span>${n[1]}${n[0]==='tasks'?`<span class="count">${state.tasks.filter(t=>t.status!=='entregada').length}</span>`:''}</button>`).join('')}</nav><div class="sidebottom"><div class="tagline">Tus pendientes, bajo control.<br><span class="small">Segundo semestre 2026</span></div><div class="user-side"><div class="avatar">${escapeHTML(state.name.split(' ').map(x=>x[0]).slice(0,2).join(''))}</div><div style="flex:1"><strong>${escapeHTML(state.name)}</strong><div class="small" style="color:#f3c7c9">${state.role==='estudiante'?'Estudiante':state.role==='catedratico'?'Catedrático':'Administración'}</div></div><button onclick="logout()" title="Cerrar sesión" aria-label="Cerrar sesión" style="border:0;background:none;color:white;font-size:19px">⇥</button></div></div></aside><div class="main"><header class="topbar"><div class="flex"><button class="icon-btn mobile-toggle" onclick="toggleDrawer()" aria-label="Abrir menú">☰</button><span class="eyebrow">MiU | Contaduría · Demo</span></div><div class="top-right"><select aria-label="Cambiar rol de demostración" onchange="changeRole(this.value)"><option value="estudiante" ${state.role==='estudiante'?'selected':''}>Estudiante</option><option value="catedratico" ${state.role==='catedratico'?'selected':''}>Catedrático</option><option value="administracion" ${state.role==='administracion'?'selected':''}>Administración</option></select><button class="icon-btn" aria-label="Guía" onclick="showGuide()">?</button><button class="icon-btn" aria-label="Avisos" onclick="nav('announcements')">♧ ${unread?'<i class="dot"></i>':''}</button><span class="avatar">${escapeHTML(state.name[0])}</span></div></header><main class="content" id="maincontent">${page()}</main></div></div>`}
+function render(){const root=$('#root');document.body.classList.toggle('mobile-preview',mobilePreview);if(!state.logged){root.innerHTML=loginHTML();return}const navs=menus[state.role]||menus.estudiante;if(!navs.some(n=>n[0]===view))view='dashboard';let unread=state.announcements.filter(a=>!a.read).length;root.innerHTML=`<div class="notice"><span><strong>MiU</strong> · Prototipo académico no oficial · ${state.authMode==='google'?'Sesión real con Google · datos de la demo locales':'Acceso de demostración'} · Sin vinculación operativa con la universidad · Datos ficticios ${storageOK?'':'· Guardado local no disponible'}</span><div class="notice-actions"><button class="link-btn" onclick="toggleMobile()">${mobilePreview?'Vista normal':'Vista móvil'}</button><button class="link-btn" onclick="resetDemo()">Reiniciar demo</button></div></div><div class="app"><aside class="sidebar ${drawer?'open':''}" id="sidebar"><div><div class="brand">MiU<span style="color:#f7b5b9">.</span></div><div class="faculty">Auditoría y Contaduría Pública</div></div><nav class="side-nav">${navs.map(n=>`<button class="navbtn ${view===n[0]?'active':''}" onclick="nav('${n[0]}')"><span class="ico">${icon(n[0])}</span>${n[1]}${n[0]==='tasks'?`<span class="count">${state.tasks.filter(t=>t.status!=='entregada').length}</span>`:''}</button>`).join('')}</nav><div class="sidebottom"><div class="tagline">Tus pendientes, bajo control.<br><span class="small">Segundo semestre 2026</span></div><div class="user-side"><div class="avatar">${escapeHTML(state.name.split(' ').map(x=>x[0]).slice(0,2).join(''))}</div><div style="flex:1"><strong>${escapeHTML(state.name)}</strong><div class="small" style="color:#f3c7c9">${state.role==='estudiante'?'Estudiante':state.role==='catedratico'?'Catedrático':'Administración'}</div></div><button onclick="logout()" title="Cerrar sesión" aria-label="Cerrar sesión" style="border:0;background:none;color:white;font-size:19px">⇥</button></div></div></aside><div class="main"><header class="topbar"><div class="flex"><button class="icon-btn mobile-toggle" onclick="toggleDrawer()" aria-label="Abrir menú">☰</button><span class="eyebrow">MiU | Contaduría · Demo</span></div><div class="top-right"><select aria-label="Cambiar rol de demostración" onchange="changeRole(this.value)"><option value="estudiante" ${state.role==='estudiante'?'selected':''}>Estudiante</option><option value="catedratico" ${state.role==='catedratico'?'selected':''}>Catedrático</option><option value="administracion" ${state.role==='administracion'?'selected':''}>Administración</option></select><button class="icon-btn" aria-label="Guía" onclick="showGuide()">?</button><button class="icon-btn" aria-label="Avisos" onclick="nav('announcements')">♧ ${unread?'<i class="dot"></i>':''}</button><span class="avatar">${escapeHTML(state.name[0])}</span></div></header><main class="content" id="maincontent">${page()}</main></div></div>`}
 function loginHTML(){return `<div class="notice"><span>MiU · Prototipo académico no oficial · Información ficticia</span><button class="link-btn" onclick="resetDemo()">Reiniciar demo</button></div>
 <section class="entry-shell">
  <div class="entry-top"><div><div class="entry-logo">MiU<span>.</span></div><div class="entry-degree">Auditoría y Contaduría Pública</div></div><div class="entry-pill">Edición académica 2026</div></div>
@@ -151,13 +160,19 @@ function loginHTML(){return `<div class="notice"><span>MiU · Prototipo académi
    <p>Dejá de buscar fechas por todos lados. Tus entregas, tus próximas clases y los avisos que importan, organizados a tu manera.</p>
 
   </div>
-  <div class="entry-form"><div class="form-mini">✦ Bienvenida a tu portal</div><h2>Hola, Marbella.<br>Qué gusto verte.</h2><p>Entrá a tu espacio de demostración y descubrí una forma más simple de llevar tu carrera al día.</p><label class="field-label" for="demoName">Nombre de estudiante</label><input class="field full" id="demoName" maxlength="45" value="${escapeHTML(state.name)}" autocomplete="off"><button class="btn entry-cta" onclick="loginDemo()">Explorar mi espacio <span aria-hidden="true">→</span></button><button class="btn secondary entry-alt" onclick="notify('Google Login no está conectado. Podés entrar con el botón Explorar mi espacio.')">Continuar con Google (simulación)</button><div class="entry-privacy"><span aria-hidden="true">◇</span><span>Esta es una demostración independiente con datos de ejemplo. No requiere una cuenta universitaria ni se conecta al MIU oficial.</span></div></div>
+  <div class="entry-form"><div class="form-mini">✦ Bienvenida a tu portal</div><h2>Hola, Marbella.<br>Qué gusto verte.</h2><p>Entrá a tu espacio de demostración y descubrí una forma más simple de llevar tu carrera al día.</p><label class="field-label" for="demoName">Nombre de estudiante</label><input class="field full" id="demoName" maxlength="45" value="${escapeHTML(state.name)}" autocomplete="off"><button class="btn entry-cta" onclick="loginDemo()">Explorar mi espacio <span aria-hidden="true">→</span></button><button class="btn secondary entry-alt" onclick="signInGoogle()">Continuar con Google</button><div class="small muted" id="googleAuthHelp" role="status">${googleConfigured()?"Google Login disponible después de configurar los usuarios de prueba en Google Cloud.":"Falta poner la clave publicable de Supabase en index.html para activar Google Login."}</div><div class="entry-privacy"><span aria-hidden="true">◇</span><span>Prototipo académico independiente con datos ficticios. El acceso con Google verifica tu identidad; las tareas y grupos de esta versión aún se guardan únicamente en este navegador.</span></div></div>
  </div>
  <div class="entry-foot"><span>Diseñado para estudiar con más claridad.</span><span>Auditoría y Contaduría Pública · Proyecto estudiantil</span></div>
 </section>`}
-function loginDemo(){let n=$('#demoName').value.trim();state.name=n||'Estudiante Demo';state.logged=true;save();render();notify('¡Bienvenida a MiU! Estás en modo demostración.')}
-function logout(){state.logged=false;save();render()}
-function changeRole(r){state.role=r;view='dashboard';save();render();notify('Cambiaste de rol en modo demostración; no es autenticación real.')}
+function loginDemo(){let n=$('#demoName').value.trim();state.name=n||'Estudiante Demo';state.logged=true;state.authMode='demo';save();render();notify('¡Bienvenida a MiU! Estás en modo demostración.')}
+async function logout(){
+ if(state.authMode==='google' && supaClient){
+  try { const {error}=await supaClient.auth.signOut(); if(error) {notify('No se pudo cerrar sesión: '+error.message);return;} }
+  catch(e){notify('Error al cerrar sesión con Google. Revisá tu conexión.');return;}
+ }
+ state.logged=false;state.authMode='demo';googleSession=null;save();render();
+}
+function changeRole(r){state.role=r;view='dashboard';save();render();notify('Cambio visual de rol de la demo. No otorga permisos reales en Supabase.')}
 function toggleMobile(){mobilePreview=!mobilePreview;drawer=false;render()}
 function toggleDrawer(){drawer=!drawer;render()}
 function resetDemo(){if(!confirm('¿Restablecer los datos ficticios del prototipo? Se perderán tus cambios locales.'))return;state=initial();save();view='dashboard';render();notify('Datos de demostración reiniciados.')}
@@ -221,6 +236,53 @@ function showGuide(){showModal(`<div class="eyebrow">GUÍA DE PRIMER INGRESO</di
 function showModal(inner){modal=inner;$('#overlay').innerHTML=`<div class="modalwrap" role="presentation" onclick="if(event.target===this)closeModal()"><section class="modal" role="dialog" aria-modal="true" aria-label="Detalle de MiU"><header><span class="eyebrow">MIU · DEMOSTRACIÓN</span><button class="x" aria-label="Cerrar" onclick="closeModal()">×</button></header><div style="margin-top:15px">${inner}</div></section></div>`;let input=$('#overlay input');if(input)input.focus()}
 function closeModal(){modal=null;$('#overlay').innerHTML=''}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal)closeModal()});
+
+async function signInGoogle(){
+ if(!googleConfigured()){notify('Primero configurá la clave sb_publishable_ en index.html en GitHub.');return;}
+ if(!supaClient){notify('No se pudo cargar Supabase. Revisá la conexión a Internet.');return;}
+ try {
+  const {error}=await supaClient.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+'/',scopes:'openid email profile'}});
+  if(error)notify('Google Login: '+error.message);
+ }catch(e){notify('Error al conectar con Google. Revisá la configuración de Supabase.');}
+}
+function setGoogleSession(session){
+ googleSession=session;
+ if(!session?.user)return;
+ const u=session.user;
+ state.logged=true;
+ state.authMode='google';
+ state.role='estudiante'; // los otros roles son demostrativos, NO permisos de seguridad
+ state.name=u.user_metadata?.full_name||u.user_metadata?.name||u.email?.split('@')[0]||'Estudiante';
+ save();render();
+}
+async function initializeGoogleAuth(){
+ if(!googleConfigured())return;
+ if(!window.supabase?.createClient){notify('No se cargó la librería de Supabase.');return;}
+ try{
+  supaClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{flowType:'pkce',detectSessionInUrl:false,persistSession:true,autoRefreshToken:true}});
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');
+  if(params.has('error')){
+   notify('No se completó Google Login: '+(params.get('error_description')||params.get('error')));
+   history.replaceState({},document.title,window.location.pathname);
+  } else if(code){
+   const {data,error}=await supaClient.auth.exchangeCodeForSession(code);
+   history.replaceState({},document.title,window.location.pathname);
+   if(error)notify('Error al completar Google Login: '+error.message);
+   else if(data?.session)setGoogleSession(data.session);
+  }
+  const {data:{session},error}=await supaClient.auth.getSession();
+  if(!error && session)setGoogleSession(session);
+  else if(state.authMode==='google') {state.logged=false;state.authMode='demo';save();render();}
+  supaClient.auth.onAuthStateChange((event,session)=>{
+    if(event==='SIGNED_IN' && session && (!googleSession || googleSession.user.id!==session.user.id))setGoogleSession(session);
+    if(event==='SIGNED_OUT' && state.authMode==='google'){
+      state.logged=false;state.authMode='demo';googleSession=null;save();render();
+    }
+  });
+ }catch(e){notify('No se pudo inicializar Google Login: '+(e?.message||'error de conexión'));}
+}
 render();
+initializeGoogleAuth();
 </script>
 </body></html>
